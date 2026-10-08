@@ -1,5 +1,3 @@
-"""Deterministic event samples used by the classroom demo."""
-
 from datetime import datetime
 
 

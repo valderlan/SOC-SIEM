@@ -303,11 +303,11 @@ Nesta etapa, ja foi implementado e validado em ambiente local:
 - teste de atividade real com `uv run soclab event send --yes` e evidencias no indice `wazuh-alerts-*`;
 - testes unitarios para config, CLI, cliente Wazuh e fluxo de verificacao Stage 1.
 
-## Secao 2 - Proximas etapas (futuro)
+## Secao 2 - Evolucao do projeto
 
-### Etapa 2 - Monitoramento da rede com Suricata
+### Etapa 2 - Monitoramento da rede com Suricata (implementada)
 
-Na Etapa 2, o projeto vai incorporar o Suricata como NIDS para ampliar a visibilidade do laboratorio com eventos de rede. O sistema passara a processar arquivos `eve.json` na aplicacao Python, fazendo validacao, normalizacao e filtragem de alertas por severidade/IP, com exibicao no terminal e demos controladas sem necessidade de ataques reais, integrando essa telemetria ao fluxo ja existente com Wazuh e Dashboard.
+Na Etapa 2, o projeto incorporou o Suricata como NIDS para ampliar a visibilidade do laboratorio com eventos de rede. O sistema processa `eve.json` na aplicacao Python com validacao, normalizacao e filtragem de alertas por severidade/IP, com exibicao no terminal e modo demo controlado sem necessidade de ataques reais, integrado ao fluxo com Wazuh e Dashboard.
 
 ---
 
@@ -324,3 +324,176 @@ Na Etapa 3, o foco sera adicionar SOAR com Shuffle e uma API Python (FastAPI) pa
 | **1** | Monitoramento dos endpoints | Wazuh | HIDS + SIEM |
 | **2** | Monitoramento da rede | Suricata | NIDS + SIEM |
 | **3** | Automacao e resposta | Shuffle + FastAPI | SOAR + Response |
+
+## Etapa 2 - NIDS com Suricata
+
+A Etapa 2 adiciona monitoramento de rede ao laboratorio, sem remover a Etapa 1.
+
+- Etapa 1: endpoint monitoring com Wazuh.
+- Etapa 2: network monitoring com Suricata (EVE JSON).
+
+Arquitetura da Etapa 2:
+
+```text
+Network
+	|
+Suricata
+	|
+eve.json
+	|
++-------------+
+|             |
+Python      Wazuh
+|             |
+CLI        Dashboard
+```
+
+### Comandos da Etapa 2
+
+```bash
+uv run soclab nids status
+uv run soclab nids alerts
+uv run soclab nids alerts --follow
+uv run soclab nids validate tests/fixtures/suricata/eve.json
+uv run soclab nids demo
+
+uv run soclab stage2 verify
+uv run soclab stage2 verify --quick
+uv run soclab stage2 verify --demo
+```
+
+### Stage 2 verify
+
+Comando principal:
+
+```bash
+uv run soclab stage2 verify
+```
+
+Modos importantes:
+
+- `--quick`: resumo rapido (sem pytest/ruff/mypy).
+- `--demo`: forca fixture local da Etapa 2.
+- `--verbose`: mostra mais detalhes dos checks.
+
+Em Windows sem Suricata real, `--demo` e suportado para apresentacao completa.
+
+### Instalar Suricata (Linux)
+
+Descobrir interfaces:
+
+```bash
+ip link
+```
+
+Instalar e configurar Suricata:
+
+```bash
+sudo ./scripts/linux/install_suricata.sh <interface>
+```
+
+Configurar integracao Suricata -> Wazuh Agent:
+
+```bash
+sudo ./scripts/linux/configure_suricata_wazuh.sh
+```
+
+Modo recomendado quando o restart do `wazuh-agent` estiver instavel:
+
+```bash
+sudo ./scripts/linux/configure_suricata_wazuh.sh /var/ossec/etc/ossec.conf /var/log/suricata/eve.json --no-restart
+```
+
+Observacao:
+
+- o script agora reaplica automaticamente `owner`, `mode` e ACL de leitura no `ossec.conf` para o usuario que executou `sudo`;
+- se precisar forcar outro usuario de leitura, use `SOCLAB_OSSEC_READ_USER`.
+
+Exemplo:
+
+```bash
+sudo SOCLAB_OSSEC_READ_USER=$USER ./scripts/linux/configure_suricata_wazuh.sh /var/ossec/etc/ossec.conf /var/log/suricata/eve.json --no-restart
+```
+
+Como usar em outras maquinas (agora sem trabalho manual extra):
+
+1. Configurar integracao sem reinicio:
+
+```bash
+sudo ./scripts/linux/configure_suricata_wazuh.sh /var/ossec/etc/ossec.conf /var/log/suricata/eve.json --no-restart
+```
+
+2. Se quiser forcar usuario de leitura:
+
+```bash
+sudo SOCLAB_OSSEC_READ_USER=$USER ./scripts/linux/configure_suricata_wazuh.sh /var/ossec/etc/ossec.conf /var/log/suricata/eve.json --no-restart
+```
+
+3. Validar:
+
+```bash
+uv run soclab nids wazuh-status --ossec-conf /var/ossec/etc/ossec.conf
+uv run soclab stage2 verify
+```
+
+Validar servico e EVE:
+
+```bash
+sudo systemctl status suricata
+tail -f /var/log/suricata/eve.json
+uv run soclab nids status
+```
+
+### Troubleshooting da Etapa 2
+
+Suricata nao inicia:
+
+- confira interface informada no script;
+- valide `sudo systemctl status suricata`;
+- revise `/etc/suricata/suricata.yaml`.
+
+Interface incorreta:
+
+- rode `ip link`;
+- execute novamente `install_suricata.sh` com interface valida.
+
+`eve.json` nao existe:
+
+- confirme se o servico esta ativo;
+- use `uv run soclab nids status`;
+- confira permissao em `/var/log/suricata/`.
+
+Permissao negada no EVE:
+
+- ajuste permissao/grupo do arquivo;
+- execute os comandos com usuario com acesso de leitura.
+
+Nenhum alerta sendo produzido:
+
+- valide se ha regras/telemetria no Suricata;
+- use `uv run soclab nids demo` para validar pipeline Python.
+
+Wazuh Agent nao le `eve.json`:
+
+- rode `sudo ./scripts/linux/configure_suricata_wazuh.sh`;
+- confirme bloco `<localfile>` no `ossec.conf`.
+
+`ossec.conf` foi restaurado/copiado e o CLI perdeu leitura:
+
+- execute novamente `configure_suricata_wazuh.sh` (ele reaplica ACL automaticamente);
+- confirme com `getfacl /var/ossec/etc/ossec.conf | grep $USER`.
+
+Eventos Suricata nao aparecem no Dashboard:
+
+- valide ingestao no manager/indexer;
+- cheque horario/timezone e filtros no Dashboard;
+- confirme indice `wazuh-alerts-*`.
+
+Windows sem Suricata real:
+
+- use fixture: `uv run soclab nids demo`;
+- execute `uv run soclab stage2 verify --demo`.
+
+### Demo para apresentacao
+
+Use o roteiro em `docs/demo-stage-2.md` para a apresentacao ao professor.

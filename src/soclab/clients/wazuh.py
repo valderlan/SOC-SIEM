@@ -138,7 +138,7 @@ class WazuhClient:
             )
             raise WazuhRequestError(message) from exc
 
-        # A JWT can expire. Refresh it once and retry the operation.
+
         if response.status_code == 401:
             self._token = None
             try:

@@ -1,0 +1,10 @@
+{"timestamp":"2026-10-08T10:20:11.123456+00:00","flow_id":1111,"event_type":"alert","src_ip":"192.0.2.10","src_port":51432,"dest_ip":"198.51.100.20","dest_port":443,"proto":"TCP","alert":{"signature":"ET TEST Suspicious TLS client hello","signature_id":900001,"category":"Potentially Bad Traffic","severity":1}}
+{"timestamp":"2026-10-08T10:21:07.000000+00:00","event_type":"alert","src_ip":"198.51.100.25","dest_ip":"203.0.113.8","proto":"UDP","alert":{"signature":"ET TEST DNS tunneling indicator","signature_id":900002,"severity":2}}
+{"timestamp":"2026-10-08T10:21:09.000000+00:00","flow_id":1112,"event_type":"flow","src_ip":"192.0.2.10","dest_ip":"198.51.100.20","proto":"TCP"}
+{"timestamp":"2026-10-08T10:21:10.000000+00:00","event_type":"dns","src_ip":"192.0.2.53","dest_ip":"198.51.100.53","proto":"UDP"}
+{"timestamp":"2026-10-08T10:21:33.000000+00:00","flow_id":1113,"event_type":"alert","src_ip":"203.0.113.25","src_port":42424,"dest_ip":"198.51.100.80","dest_port":80,"proto":"TCP","alert":{"signature":"ET TEST HTTP suspicious user-agent","signature_id":900003,"category":"Attempted Information Leak","severity":3}}
+{"timestamp":"2026-10-08T10:21:34.000000+00:00","event_type":"http","src_ip":"203.0.113.25","dest_ip":"198.51.100.80","proto":"TCP"}
+{"timestamp":"2026-10-08T10:21:52.000000+00:00","flow_id":1114,"event_type":"alert","src_ip":"192.0.2.77","src_port":51515,"dest_ip":"198.51.100.200","dest_port":22,"proto":"TCP","alert":{"signature":"ET TEST SSH brute-force threshold","signature_id":900004,"category":"Attempted Administrator Privilege Gain","severity":4}}
+{"timestamp":"2026-10-08T10:21:57.000000+00:00","event_type":"tls","src_ip":"192.0.2.90","dest_ip":"198.51.100.90","proto":"TCP"}
+{ this line is not valid json }
+{"timestamp":"2026-10-08T10:22:01.000000+00:00","event_type":"alert","src_ip":"192.0.2.120","dest_ip":"198.51.100.120","proto":"UDP","alert":{"signature":"ET TEST UDP scan behavior","signature_id":900005,"category":"Attempted Information Leak","severity":2}}

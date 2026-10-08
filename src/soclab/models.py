@@ -4,7 +4,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentOS(BaseModel):
-    """Operating-system information returned by Wazuh."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -14,7 +13,6 @@ class AgentOS(BaseModel):
 
 
 class Agent(BaseModel):
-    """Normalized Wazuh agent representation."""
 
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
@@ -34,7 +32,6 @@ class Agent(BaseModel):
 
 
 class RuleMatch(BaseModel):
-    """Relevant result of a Wazuh logtest operation."""
 
     matched: bool
     rule_id: str | None = None
@@ -46,7 +43,6 @@ class RuleMatch(BaseModel):
 
 
 class HealthReport(BaseModel):
-    """Compact state used by the health command."""
 
     api_ok: bool
     api_version: str | None = None

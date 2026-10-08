@@ -1,6 +1,3 @@
-"""Application-specific exceptions."""
-
-
 class SocLabError(Exception):
     """Base exception for expected SOC Lab failures."""
 
