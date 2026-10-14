@@ -1,5 +1,3 @@
-"""Cross-platform Stage 1 verification for SOC Lab."""
-
 from __future__ import annotations
 
 import json

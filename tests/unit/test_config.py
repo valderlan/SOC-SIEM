@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from soclab.config import ENV_FILE_PATH, Settings, get_settings
+from soclab.config import ENV_FILE_PATH, Settings, get_settings, get_settings_optional
 from soclab.exceptions import ConfigurationError
 
 
@@ -55,3 +55,18 @@ def test_get_settings_missing_password_has_friendly_message(
     assert str(ENV_FILE_PATH.resolve()) in message
 
     get_settings.cache_clear()
+
+
+def test_get_settings_optional_allows_missing_password(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setitem(Settings.model_config, "env_file", tmp_path / ".env")
+    monkeypatch.delenv("SOCLAB_WAZUH_PASSWORD", raising=False)
+    get_settings_optional.cache_clear()
+
+    settings = get_settings_optional()
+
+    assert settings.wazuh_password.get_secret_value() == "CHANGE_ME"
+
+    get_settings_optional.cache_clear()

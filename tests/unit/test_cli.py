@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from soclab import cli
 from soclab.config import Settings
 from soclab.exceptions import ConfigurationError, WazuhRequestError
+from soclab.services.nids import EveValidationSummary
 from soclab.services.stage1_verification import (
     CheckResult,
     CheckStatus,
@@ -140,5 +141,81 @@ def test_stage1_verify_returns_one_on_required_failure(
 
     monkeypatch.setattr(cli, "Stage1VerificationService", FakeService)
     result = runner.invoke(cli.app, ["stage1", "verify", "--quick"])
+
+    assert result.exit_code == 1
+
+
+def test_nids_demo_reports_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeNidsService:
+        def demo_eve_path(self, project_root: object) -> object:
+            return "tests/fixtures/suricata/eve.json"
+
+        def validate_eve_file(
+            self,
+            file: object,
+            *,
+            collect_alerts: bool = False,
+        ) -> EveValidationSummary:
+            return EveValidationSummary(
+                path="tests/fixtures/suricata/eve.json",  # type: ignore[arg-type]
+                total_lines=10,
+                valid_json=9,
+                invalid_json=1,
+                alert_events=5,
+                ignored_events=4,
+                normalized_alerts=5,
+                alerts=[],
+            )
+
+    monkeypatch.setattr(cli, "_nids_service", lambda: FakeNidsService())
+    result = runner.invoke(cli.app, ["nids", "demo"])
+
+    assert result.exit_code == 0
+    assert "Demo result" in result.stdout
+    assert "PASS" in result.stdout
+
+
+def test_stage2_verify_returns_zero_on_ready_for_demo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStage2Service:
+        def __init__(self, *, console: object) -> None:
+            self.console = console
+
+        def verify(
+            self,
+            *,
+            quick: bool,
+            demo: bool,
+            verbose: bool,
+        ) -> object:
+            return type("Report", (), {"status_label": "READY FOR DEMO"})()
+
+    monkeypatch.setattr(cli, "Stage2VerificationService", FakeStage2Service)
+
+    result = runner.invoke(cli.app, ["stage2", "verify", "--demo", "--quick"])
+
+    assert result.exit_code == 0
+
+
+def test_stage2_verify_returns_one_when_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStage2Service:
+        def __init__(self, *, console: object) -> None:
+            self.console = console
+
+        def verify(
+            self,
+            *,
+            quick: bool,
+            demo: bool,
+            verbose: bool,
+        ) -> object:
+            return type("Report", (), {"status_label": "NOT READY"})()
+
+    monkeypatch.setattr(cli, "Stage2VerificationService", FakeStage2Service)
+
+    result = runner.invoke(cli.app, ["stage2", "verify", "--quick"])
 
     assert result.exit_code == 1

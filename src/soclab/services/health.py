@@ -1,5 +1,3 @@
-"""Health aggregation logic."""
-
 from soclab.clients.wazuh import WazuhClient
 from soclab.models import HealthReport
 

@@ -1,0 +1,1 @@
+{"timestamp":"2026-10-08T10:20:11+00:00","event_type":"alert","src_ip":"192.0.2.10","dest_ip":"198.51.100.20","proto":"TCP","alert":{"severity":2,"signature":"demo","signature_id":1}}
