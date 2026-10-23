@@ -16,3 +16,11 @@ class WazuhAuthenticationError(WazuhError):
 
 class WazuhRequestError(WazuhError):
     """Raised when a Wazuh API request fails."""
+
+
+class AlertMappingError(SocLabError):
+    """Raised when an inbound webhook payload cannot become a SecurityAlert."""
+
+
+class ResponseError(SocLabError):
+    """Raised when the response engine cannot decide or execute an action."""

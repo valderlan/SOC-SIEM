@@ -13,11 +13,14 @@ from soclab.clients.wazuh import WazuhClient
 from soclab.config import Settings, get_settings, get_settings_optional
 from soclab.domain.alert import AlertSeverity, SecurityAlert
 from soclab.exceptions import SocLabError
+from soclab.services.demo import run_demo
 from soclab.services.events import sample_failed_ssh_event
 from soclab.services.health import build_health_report
 from soclab.services.nids import AlertFilters, NidsService, format_size, parse_ip_filter
+from soclab.services.response import ResponseService, build_response_service
 from soclab.services.stage1_verification import Stage1VerificationService
 from soclab.services.stage2_verification import Stage2VerificationService
+from soclab.services.stage3_verification import Stage3VerificationService
 
 app = typer.Typer(
     name="soclab",
@@ -32,6 +35,10 @@ nids_app = typer.Typer(help="Run Stage 2 NIDS checks and Suricata utilities.")
 app.add_typer(nids_app, name="nids")
 stage2_app = typer.Typer(help="Run Stage 2 verification checks.")
 app.add_typer(stage2_app, name="stage2")
+stage3_app = typer.Typer(help="Run Stage 3 (SOAR response) verification checks.")
+app.add_typer(stage3_app, name="stage3")
+demo_app = typer.Typer(help="Run end-to-end stage demos.")
+app.add_typer(demo_app, name="demo")
 console = Console()
 
 
@@ -50,6 +57,15 @@ def _nids_service() -> NidsService:
 
 def _nids_settings() -> Settings:
     return get_settings_optional()
+
+
+def _stage3_settings() -> Settings:
+    """Stage 3 runs without Wazuh credentials; the webhook token is separate."""
+    return get_settings_optional()
+
+
+def _response_service() -> ResponseService:
+    return build_response_service(_stage3_settings())
 
 
 def _parse_severity_filter(value: str | None) -> AlertSeverity | None:
@@ -114,7 +130,16 @@ def config() -> None:
     table.add_row("Suricata enabled", str(settings.suricata_enabled))
     table.add_row("Suricata EVE path", str(settings.suricata_eve_path))
     table.add_row("Suricata interface", settings.suricata_interface or "-")
+    table.add_row("API bind", f"{settings.api_host}:{settings.api_port}")
+    table.add_row(
+        "Response mode", "dry-run" if settings.response_dry_run else "LIVE"
+    )
+    table.add_row("Audit log", str(settings.audit_log_path))
     table.add_row("Password", "********")
+    table.add_row(
+        "Webhook token",
+        "********" if settings.webhook_token.get_secret_value() else "not set",
+    )
     console.print(table)
 
 
@@ -636,3 +661,215 @@ def stage1_verify(
         raise typer.Exit(code=1) from None
 
     raise typer.Exit(code=1 if report.has_required_failures else 0)
+
+
+@app.command()
+def run(
+    host: Annotated[
+        str | None,
+        typer.Option("--host", help="API bind address (default: SOCLAB_API_HOST)."),
+    ] = None,
+    port: Annotated[
+        int | None,
+        typer.Option("--port", help="API port (default: SOCLAB_API_PORT)."),
+    ] = None,
+    reload: Annotated[
+        bool,
+        typer.Option("--reload", help="Auto-reload the API (development only)."),
+    ] = False,
+) -> None:
+    """Start the Stage 3 SOAR webhook API. Responses are dry-run by default."""
+    try:
+        settings = _stage3_settings()
+        service = _response_service()
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    host_value = host or settings.api_host
+    port_value = port or settings.api_port
+    token_configured = bool(settings.webhook_token.get_secret_value())
+
+    table = Table(title="Open SOC Lab - Stage 3 API")
+    table.add_column("Setting")
+    table.add_column("Value")
+    table.add_row("Bind", f"{host_value}:{port_value}")
+    table.add_row("Response mode", "dry-run" if service.dry_run else "LIVE")
+    table.add_row("Firewall adapter", service.adapter_name)
+    table.add_row("Webhook token", "configured" if token_configured else "NOT CONFIGURED")
+    table.add_row("Protected networks", settings.protected_networks)
+    table.add_row("Audit log", str(settings.audit_log_path))
+    console.print(table)
+
+    if not token_configured:
+        console.print(
+            "[bold red]WARNING:[/bold red] SOCLAB_WEBHOOK_TOKEN is not set; "
+            "POST /api/v1/alerts answers 503."
+        )
+    if not service.dry_run:
+        console.print(
+            "[bold yellow]WARNING:[/bold yellow] live firewall mode is enabled "
+            "and blocks will be applied for real."
+        )
+
+    import uvicorn
+
+    from soclab.api.app import create_app
+
+    uvicorn.run(
+        create_app(settings=settings, response_service=service),
+        host=host_value,
+        port=port_value,
+        reload=reload,
+    )
+
+
+@app.command()
+def status() -> None:
+    """Show Stage 3 SOAR status: API, policy, adapter and local state."""
+    try:
+        settings = _stage3_settings()
+        service = _response_service()
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    problems = service.readiness_problems()
+    if not settings.webhook_token.get_secret_value():
+        problems.append("webhook token is not configured")
+    table = Table(title="Open SOC Lab - Stage 3 SOAR status")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("API bind", f"{settings.api_host}:{settings.api_port}")
+    table.add_row("Response mode", "dry-run" if service.dry_run else "LIVE")
+    table.add_row("Firewall adapter", service.adapter_name)
+    table.add_row(
+        "Webhook token",
+        "configured" if settings.webhook_token.get_secret_value() else "NOT CONFIGURED",
+    )
+    table.add_row("Protected networks", settings.protected_networks)
+    table.add_row("Audit log", str(settings.audit_log_path))
+    table.add_row("Dedup database", str(settings.state_db_path))
+    table.add_row("Processed alerts", str(service.processed_alert_count))
+    table.add_row("Ready", "YES" if not problems else "; ".join(problems))
+    console.print(table)
+
+
+@stage3_app.command("verify")
+def stage3_verify(
+    quick: Annotated[
+        bool,
+        typer.Option(
+            "--quick", help="Run quick checks only (skip pytest, ruff, mypy)."
+        ),
+    ] = False,
+    watch: Annotated[
+        bool,
+        typer.Option("--watch", help="Re-run verification continuously."),
+    ] = False,
+    demo: Annotated[
+        bool,
+        typer.Option("--demo", help="Also run the end-to-end response demo."),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", help="Show detailed subprocess output."),
+    ] = False,
+    interval: Annotated[
+        int,
+        typer.Option("--interval", help="Seconds between checks in watch mode."),
+    ] = 30,
+    no_color: Annotated[
+        bool,
+        typer.Option("--no-color", help="Disable color output for this run."),
+    ] = False,
+) -> None:
+    """Run the Stage 3 verification report (always in dry-run mode)."""
+    local_console = Console(no_color=no_color)
+    if interval < 1:
+        local_console.print(
+            "[bold red]ERROR:[/bold red] --interval must be >= 1 second."
+        )
+        raise typer.Exit(code=1)
+
+    service = Stage3VerificationService(console=local_console)
+    try:
+        report = service.verify(quick=quick, demo=demo, verbose=verbose)
+        while watch:
+            local_console.print(
+                "\n[cyan]"
+                f"Waiting {interval}s before next verification. "
+                "Press Ctrl+C to stop."
+                "[/cyan]"
+            )
+            time.sleep(interval)
+            local_console.clear()
+            report = service.verify(quick=quick, demo=demo, verbose=verbose)
+    except KeyboardInterrupt:
+        local_console.print(
+            "[bold yellow]Verification interrupted by user.[/bold yellow]"
+        )
+        raise typer.Exit(code=1) from None
+
+    raise typer.Exit(code=1 if report.has_required_failures else 0)
+
+
+@demo_app.command("final")
+def demo_final() -> None:
+    """Run the full Stage 3 flow: policy, dedup, protection and webhook API."""
+    try:
+        settings = _stage3_settings()
+        service = _response_service()
+        report = run_demo(service=service, settings=settings)
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    console.print("[bold]Open SOC Lab - Stage 3 demo[/bold]")
+
+    table = Table(title="Alert -> policy -> adapter (dry-run)")
+    table.add_column("STEP", no_wrap=True)
+    table.add_column("SEVERITY", no_wrap=True)
+    table.add_column("SRC IP", no_wrap=True)
+    table.add_column("REQUESTED", no_wrap=True)
+    table.add_column("ACTION", no_wrap=True)
+    table.add_column("EXEC", no_wrap=True)
+    table.add_column("RESULT", no_wrap=True)
+
+    for step in report.steps:
+        expectation = step.expectation
+        outcome = step.outcome
+        color = "green" if step.passed else "red"
+        table.add_row(
+            expectation.label,
+            outcome.severity.value,
+            str(expectation.alert.src_ip) if expectation.alert.src_ip else "-",
+            outcome.requested_action.value,
+            outcome.action.value,
+            "no" if not outcome.executed else "yes",
+            f"[{color}]{'PASS' if step.passed else 'FAIL'}[/{color}]",
+        )
+    console.print(table)
+
+    api_table = Table(title="Webhook API (in-process)")
+    api_table.add_column("CHECK")
+    api_table.add_column("STATUS")
+    api_table.add_column("DETAIL")
+    for check in report.api_checks:
+        color = "green" if check.passed else "red"
+        status_text = "PASS" if check.passed else "FAIL"
+        api_table.add_row(check.name, f"[{color}]{status_text}[/{color}]", check.detail)
+    console.print(api_table)
+
+    console.print(f"Run id ........................ {report.run_id}")
+    console.print(f"Dry-run mode .................. {'YES' if service.dry_run else 'NO'}")
+    console.print(f"Audit log ..................... {settings.audit_log_path}")
+
+    color = "green" if report.passed else "red"
+    result_text = "PASS" if report.passed else "FAIL"
+    console.print(f"Demo result ................... [{color}]{result_text}[/{color}]")
+    if not report.passed:
+        for failure in report.failures:
+            console.print(f"  [red]-[/red] {failure}")
+
+    raise typer.Exit(code=0 if report.passed else 1)

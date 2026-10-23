@@ -1,0 +1,70 @@
+# Stage 3 stack: SOC Lab SOAR API + Shuffle orchestration.
+# Everything here is opt-in:  docker compose --profile full up -d
+# The SOC Lab service always answers in dry-run unless SOCLAB_RESPONSE_DRY_RUN=false.
+name: soclab
+
+services:
+  soclab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: soclab:stage3
+    profiles: ["full"]
+    env_file:
+      - .env
+    environment:
+      SOCLAB_API_HOST: 0.0.0.0
+      SOCLAB_API_PORT: "8080"
+      SOCLAB_AUDIT_LOG_PATH: /app/logs/audit.jsonl
+      SOCLAB_STATE_DB_PATH: /app/runtime/soclab_state.db
+    command: ["soclab", "run", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/app/logs
+      - ./runtime:/app/runtime
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Shuffle needs OpenSearch as its datastore. The workflow itself is built in
+  # the Shuffle UI and documented in docs/shuffle-workflow.md.
+  shuffle-opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    profiles: ["full"]
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    restart: unless-stopped
+
+  shuffle-backend:
+    image: ghcr.io/shuffle/shuffle-backend:latest
+    profiles: ["full"]
+    environment:
+      SHUFFLE_OPENSEARCH_URL: http://shuffle-opensearch:9200
+      ORG_ID: SOCLab
+      ENVIRONMENT_NAME: SOCLab
+    depends_on:
+      - shuffle-opensearch
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+
+  shuffle-frontend:
+    image: ghcr.io/shuffle/shuffle-frontend:latest
+    profiles: ["full"]
+    environment:
+      BACKEND_HOSTNAME: shuffle-backend:5001
+    depends_on:
+      - shuffle-backend
+    ports:
+      - "3001:80"
+    restart: unless-stopped

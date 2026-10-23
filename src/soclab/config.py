@@ -2,9 +2,17 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Self
 
-from pydantic import AnyHttpUrl, Field, SecretStr, ValidationError, model_validator
+from pydantic import (
+    AnyHttpUrl,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from soclab.domain.networks import DEFAULT_PROTECTED_NETWORKS, parse_network_list
 from soclab.exceptions import ConfigurationError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -31,11 +39,26 @@ class Settings(BaseSettings):
     suricata_eve_path: Path = Field(default=Path("/var/log/suricata/eve.json"))
     suricata_interface: str | None = None
 
+    # Stage 3 (SOAR webhook + response engine)
+    webhook_token: SecretStr = Field(default=SecretStr(""))
+    api_host: str = Field(default="127.0.0.1", min_length=1)
+    api_port: int = Field(default=8080, ge=1, le=65535)
+    response_dry_run: bool = True
+    protected_networks: str = DEFAULT_PROTECTED_NETWORKS
+    audit_log_path: Path = Field(default=Path("logs/audit.jsonl"))
+    state_db_path: Path = Field(default=Path("runtime/soclab_state.db"))
+
     @model_validator(mode="after")
     def validate_tls(self) -> Self:
         if self.wazuh_ca_bundle is not None and not self.wazuh_ca_bundle.is_file():
             raise ValueError(f"CA bundle not found: {self.wazuh_ca_bundle}")
         return self
+
+    @field_validator("protected_networks")
+    @classmethod
+    def _validate_protected_networks(cls, value: str) -> str:
+        parse_network_list(value)
+        return value
 
     @property
     def httpx_verify(self) -> bool | str:

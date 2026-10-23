@@ -497,3 +497,22 @@ Windows sem Suricata real:
 ### Demo para apresentacao
 
 Use o roteiro em `docs/demo-stage-2.md` para a apresentacao ao professor.
+
+## Etapa 3 - SOAR (Shuffle -> SOC Lab API -> Firewall)
+
+Pipeline: Suricata/Wazuh detectam -> Shuffle orquestra -> `POST /api/v1/alerts`
+-> SOC Lab decide -> firewall adapter responde (dry-run por padrao).
+
+```bash
+uv run soclab run                          # API FastAPI (dry-run)
+uv run soclab status                       # API, politica, adapter e estado
+uv run soclab stage3 verify --quick        # verificacao da Etapa 3
+uv run soclab demo final                   # demo ponta a ponta
+docker compose --profile full up -d        # SOC Lab + Shuffle
+```
+
+- Token do webhook: `SOCLAB_WEBHOOK_TOKEN` (header `X-SOCLAB-TOKEN`, nunca logado).
+- Politica: LOW/MEDIUM -> LOG, HIGH -> NOTIFY, CRITICAL -> BLOCK_IP.
+- Loopback e faixas administrativas (`SOCLAB_PROTECTED_NETWORKS`) nunca sao bloqueados.
+- Decisoes auditadas em `logs/audit.jsonl`; `alert_id` repetido e ignorado (SQLite).
+- Configuracao detalhada do Shuffle: `docs/shuffle-workflow.md`.
