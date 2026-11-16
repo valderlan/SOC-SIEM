@@ -8,7 +8,12 @@ import pytest
 from soclab.collectors.suricata import EveRecord, SuricataEveCollector
 from soclab.domain.alert import AlertSeverity
 from soclab.normalizers.suricata import normalize_suricata_severity
-from soclab.services.nids import AlertFilters, NidsService, parse_ip_filter
+from soclab.services.nids import (
+    AlertFilters,
+    NidsService,
+    parse_ip_filter,
+    resolve_eve_path,
+)
 
 
 def _fixture_path() -> Path:
@@ -155,3 +160,26 @@ def test_follow_alerts_filters_stream(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert len(alerts) == 1
     assert alerts[0].severity == AlertSeverity.CRITICAL
+
+
+def test_resolve_eve_path_uses_live_container_mount_for_default_path(
+    tmp_path: Path,
+) -> None:
+    live_mount = tmp_path / "runtime" / "suricata" / "eve.json"
+    live_mount.parent.mkdir(parents=True)
+    live_mount.write_text("", encoding="utf-8")
+
+    missing_default = tmp_path / "nonexistent-var-log-suricata-eve.json"
+    resolved = resolve_eve_path(
+        missing_default,
+        project_root=tmp_path,
+        default_path=missing_default,
+    )
+    custom_missing = resolve_eve_path(
+        tmp_path / "explicit-custom.json",
+        project_root=tmp_path,
+        default_path=missing_default,
+    )
+
+    assert resolved == live_mount
+    assert custom_missing == tmp_path / "explicit-custom.json"

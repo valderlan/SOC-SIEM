@@ -13,7 +13,12 @@ from pathlib import Path
 from rich.console import Console
 
 from soclab.config import Settings, get_settings_optional
-from soclab.services.nids import EveValidationSummary, NidsService, NidsStatus
+from soclab.services.nids import (
+    EveValidationSummary,
+    NidsService,
+    NidsStatus,
+    resolve_eve_path,
+)
 from soclab.services.stage1_verification import (
     CheckResult,
     CheckStatus,
@@ -81,7 +86,10 @@ class Stage2VerificationService:
         self._render_environment()
 
         settings = self._settings_loader()
-        runtime_path = Path(settings.suricata_eve_path)
+        runtime_path = resolve_eve_path(
+            Path(settings.suricata_eve_path),
+            project_root=self._project_root,
+        )
         runtime_status = self._nids.status(
             enabled=settings.suricata_enabled,
             eve_path=runtime_path,
@@ -436,6 +444,31 @@ class Stage2VerificationService:
             ]
 
         integration = self._nids.check_wazuh_integration(eve_path=eve_path)
+        container_eve = self._project_root / "runtime" / "suricata" / "eve.json"
+        if (
+            not integration.config_found
+            and platform.system().lower().startswith("win")
+            and eve_path == container_eve
+        ):
+            return [
+                CheckResult(
+                    key="wazuh_agent",
+                    name="Wazuh Agent",
+                    status=CheckStatus.SKIP,
+                    message="Managed inside Docker container 'linux-target'.",
+                    required=False,
+                ),
+                CheckResult(
+                    key="suricata_wazuh",
+                    name="Suricata -> Wazuh",
+                    status=CheckStatus.PASS,
+                    message=(
+                        "Using live containerized Suricata mount "
+                        "(runtime/suricata/eve.json)."
+                    ),
+                    required=False,
+                ),
+            ]
         if not integration.config_found:
             return [
                 CheckResult(

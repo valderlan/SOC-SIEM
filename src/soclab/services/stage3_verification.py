@@ -162,6 +162,7 @@ class Stage3VerificationService:
         return settings.model_copy(
             update={
                 "audit_log_path": scratch / "logs" / "audit.jsonl",
+                "evidence_dir": scratch / "logs" / "evidence",
                 "state_db_path": scratch / "runtime" / "soclab_state.db",
                 "response_dry_run": True,
             }

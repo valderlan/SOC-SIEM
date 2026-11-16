@@ -178,3 +178,50 @@ def test_stage2_verify_real_mode_ready_when_runtime_and_integration_ok(
     assert report.status_label == "READY"
     assert report.checks["suricata_runtime"].status == CheckStatus.PASS
     assert report.checks["suricata_wazuh"].status == CheckStatus.PASS
+
+
+def test_stage2_verify_windows_uses_live_container_eve_when_present(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    _write_fixture(tmp_path, relative_path="runtime/suricata/eve.json")
+
+    class FakeStage1Service:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        def verify(self, **kwargs: object) -> VerificationReport:
+            return _fake_stage1_report(CheckStatus.PASS)
+
+    class NoHostOssecNidsService(NidsService):
+        def _find_ossec_conf(self) -> Path | None:
+            return None
+
+    monkeypatch.setattr(
+        "soclab.services.stage2_verification.Stage1VerificationService",
+        FakeStage1Service,
+    )
+    monkeypatch.setattr(
+        "soclab.services.stage2_verification.platform.system", lambda: "Windows"
+    )
+
+    settings = Settings(
+        wazuh_password="secret",
+        suricata_enabled=True,
+        suricata_eve_path=Path("/var/log/suricata/eve.json"),
+    )
+
+    service = Stage2VerificationService(
+        console=Console(file=io.StringIO(), no_color=True, force_terminal=False),
+        project_root=tmp_path,
+        settings_loader=lambda: settings,
+        nids_service=NoHostOssecNidsService(),
+    )
+
+    report = service.verify(quick=True, demo=False, verbose=False)
+
+    assert report.effective_demo_mode is False
+    assert report.status_label == "READY"
+    assert report.checks["suricata_runtime"].status == CheckStatus.PASS
+    assert report.checks["suricata_wazuh"].status == CheckStatus.PASS

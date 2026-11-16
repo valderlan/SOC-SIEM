@@ -82,3 +82,46 @@ def test_invalid_payload_reports_field_errors() -> None:
         map_shuffle_alert({"alert_id": "bad-timestamp", "severity": "HIGH", "time": "yesterday"})
 
     assert "timestamp" in str(excinfo.value)
+
+
+def test_wazuh_native_shuffle_all_fields_preserves_rule_level_and_srcip() -> None:
+    alert = map_shuffle_alert(
+        {
+            "severity": 3,
+            "pretext": "WAZUH Alert",
+            "rule_id": "100101",
+            "id": "1731760000.12345",
+            "timestamp": "2026-11-16T12:00:00.000+0000",
+            "all_fields": {
+                "id": "1731760000.12345",
+                "timestamp": "2026-11-16T12:00:00.000+0000",
+                "rule": {
+                    "id": "100101",
+                    "level": 13,
+                    "description": "Suricata critical attack",
+                    "groups": ["suricata", "ids"],
+                },
+                "agent": {"id": "001", "name": "linux-target"},
+                "data": {
+                    "src_ip": "172.28.0.200",
+                    "dest_ip": "172.28.0.20",
+                    "proto": "TCP",
+                    "alert": {
+                        "signature": "SOCLAB SQLi test",
+                        "signature_id": 910002,
+                        "category": "Web Application Attack",
+                        "severity": 1,
+                    },
+                },
+            },
+        }
+    )
+
+    assert alert.alert_id == "1731760000.12345"
+    assert alert.source == "wazuh"
+    assert alert.severity is AlertSeverity.CRITICAL
+    assert str(alert.src_ip) == "172.28.0.200"
+    assert str(alert.dst_ip) == "172.28.0.20"
+    assert alert.protocol == "TCP"
+    assert alert.signature_id == 910002
+    assert alert.category == "Web Application Attack"

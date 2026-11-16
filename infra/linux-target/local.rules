@@ -1,0 +1,18 @@
+# Custom Suricata rules for deterministic Open SOC Lab testing across all severities.
+# Suricata "priority" maps directly to alert.severity in eve.json:
+#   1 -> CRITICAL (BLOCK_IP)
+#   2 -> HIGH     (NOTIFY)
+#   3 -> MEDIUM   (LOG)
+#   4 -> LOW      (LOG)
+
+alert icmp any any -> $HOME_NET any (msg:"SOCLAB NIDS ICMP Recon Probe"; itype:8; classtype:attempted-recon; priority:4; sid:910001; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"SOCLAB NIDS Suspicious Admin Path Discovery"; flow:to_server,established; content:"/admin"; http_uri; nocase; classtype:web-application-activity; priority:3; sid:910002; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"SOCLAB NIDS Nmap HTTP Scanner User-Agent"; flow:to_server,established; content:"Nmap"; http_user_agent; nocase; classtype:attempted-recon; priority:3; sid:910003; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"SOCLAB NIDS SQL Injection Attempt"; flow:to_server,established; content:"UNION"; http_uri; nocase; content:"SELECT"; http_uri; nocase; classtype:web-application-attack; priority:2; sid:910004; rev:1;)
+
+alert tcp any any -> $HOME_NET 22 (msg:"SOCLAB NIDS Critical SSH Brute-Force Threshold"; flow:to_server; flags:S; threshold:type threshold, track by_src, count 4, seconds 30; classtype:attempted-admin; priority:1; sid:910005; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"SOCLAB NIDS Critical Path Traversal /etc/passwd Exploit"; flow:to_server,established; content:"/etc/passwd"; http_uri; nocase; classtype:web-application-attack; priority:1; sid:910006; rev:1;)

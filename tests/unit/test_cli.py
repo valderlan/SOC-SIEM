@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -219,3 +220,44 @@ def test_stage2_verify_returns_one_when_not_ready(
     result = runner.invoke(cli.app, ["stage2", "verify", "--quick"])
 
     assert result.exit_code == 1
+
+
+def test_cli_unblock_runs_in_dry_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    settings = Settings(
+        audit_log_path=tmp_path / "logs" / "audit.jsonl",
+        state_db_path=tmp_path / "runtime" / "state.db",
+        evidence_dir=tmp_path / "logs" / "evidence",
+        response_dry_run=True,
+    )
+    monkeypatch.setattr(cli, "_stage3_settings", lambda: settings)
+
+    result = runner.invoke(cli.app, ["unblock", "203.0.113.99"])
+
+    assert result.exit_code == 0
+    assert "203.0.113.99" in result.stdout
+    assert "would unblock" in result.stdout
+
+
+def test_cli_dedup_status_and_clear(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from soclab.services.dedup import AlertDeduplicator
+
+    db_path = tmp_path / "runtime" / "state.db"
+    dedup = AlertDeduplicator(db_path)
+    dedup.is_duplicate("a-1")
+    dedup.is_duplicate("a-2")
+
+    settings = Settings(
+        state_db_path=db_path,
+        dedup_ttl_seconds=3600,
+    )
+    monkeypatch.setattr(cli, "_stage3_settings", lambda: settings)
+
+    status_res = runner.invoke(cli.app, ["dedup", "status"])
+    assert status_res.exit_code == 0
+    assert "3600s" in status_res.stdout
+    assert "2" in status_res.stdout
+
+    clear_res = runner.invoke(cli.app, ["dedup", "clear"])
+    assert clear_res.exit_code == 0
+    assert "Removed 2 deduplication record(s)" in clear_res.stdout
+    assert dedup.count() == 0

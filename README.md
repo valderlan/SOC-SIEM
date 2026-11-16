@@ -1,3 +1,30 @@
+# Open SOC Lab (HIDS + NIDS + SIEM + SOAR + Dashboards)
+
+Ambiente integrado de **SOC/SIEM Open-Source** portatil e automatizado em containers Docker (com suporte opcional a endpoint Windows fisico ou em VM):
+
+- **HIDS + SIEM:** Wazuh (`wazuh.manager` + `wazuh.indexer` + `wazuh.dashboard`) + `linux-target` (Ubuntu + Nginx + OpenSSH + Wazuh Agent)
+- **NIDS:** Suricata capturando trafego real no `linux-target` (`EVE JSON`)
+- **SOAR + Resposta Ativa:** Shuffle SOAR (`backend`, `frontend`, `orborus`, `opensearch`) + API FastAPI (`soclab`) com bloqueio `nftables` isolado no container alvo, coleta de evidencias (`logs/evidence/`) e auditoria (`logs/audit.jsonl`)
+- **Notificacoes:** Mailpit SMTP/Webmail local em container + webhook opcional de Chat (Discord/Slack)
+- **Ataques Controlados:** Container Kali Linux (`kali-attacker`) com Nmap, SQLi, brute-force SSH e path traversal
+
+### Subir Tudo com 1 Clique
+
+#### Windows (PowerShell + Docker Desktop + WSL2)
+```powershell
+Set-ExecutionPolicy -Scope Process RemoteSigned
+.\scripts\up.ps1
+```
+
+#### Linux (bash + Docker Compose v2)
+```bash
+./scripts/up.sh
+```
+
+Para desligar tudo depois: `.\scripts\down.ps1` (Windows) ou `docker compose --profile full down` (Linux).
+
+---
+
 # Open SOC Lab - Etapa 1
 
 ## O que a Etapa 1 faz
@@ -516,3 +543,38 @@ docker compose --profile full up -d        # SOC Lab + Shuffle
 - Loopback e faixas administrativas (`SOCLAB_PROTECTED_NETWORKS`) nunca sao bloqueados.
 - Decisoes auditadas em `logs/audit.jsonl`; `alert_id` repetido e ignorado (SQLite).
 - Configuracao detalhada do Shuffle: `docs/shuffle-workflow.md`.
+
+## Etapa 4 - Integracao Ponta a Ponta, Dashboards e 1-Clique
+
+Fluxo completo automatizado:
+
+```text
+Kali (kali-attacker) -> Rede (soclab-net) -> Suricata + Wazuh Agent (linux-target)
+  -> Wazuh Manager (local_rules.xml + <integration> shuffle)
+  -> Shuffle SOAR -> POST /api/v1/alerts (soclab)
+  -> nftables block (isolado no linux-target) + Mailpit/Chat + logs/evidence/ + logs/audit.jsonl -> Wazuh Dashboard
+```
+
+### Comandos principais da Etapa 4
+
+```powershell
+.\scripts\up.ps1                      # sobe e provisiona todo o laboratorio (1-clique)
+soclab lab provision                  # reaplica rede, regras Wazuh, workflow Shuffle e Dashboards
+soclab stage4 verify                  # valida ponta a ponta (infra + API + Shuffle + Dashboard + testes)
+soclab attack all                     # executa simulacao controlada a partir do container Kali
+soclab attack check                   # verifica se o atacante foi bloqueado pelo firewall
+docker compose --profile full exec soclab soclab unblock 172.28.0.200  # remove bloqueio apos demo
+.\scripts\down.ps1                    # encerra todos os containers
+```
+
+### URLs do Ambiente
+- **Wazuh Dashboard:** `https://localhost` (`admin` / `SecretPassword`) — Dashboard `Open SOC Lab - SOC Overview`
+- **Shuffle SOAR:** `http://localhost:3001` (`admin` / `soclab-shuffle-admin`)
+- **Mailpit Webmail:** `http://127.0.0.1:8025`
+- **SOC Lab API Docs:** `http://127.0.0.1:8080/docs`
+- **Web Server Alvo:** `http://127.0.0.1:8081`
+
+### Guias da Etapa 4
+- `docs/dashboards-and-threat-hunting.md`
+- `docs/attack-simulation-guide.md`
+- `docs/relatorio_estado_atual_do_projeto.md`

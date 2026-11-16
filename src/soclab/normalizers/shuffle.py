@@ -12,8 +12,9 @@ from pydantic import ValidationError
 
 from soclab.domain.alert import AlertSeverity, SecurityAlert
 from soclab.exceptions import AlertMappingError
+from soclab.normalizers.suricata import normalize_suricata_severity
 
-_WRAPPER_KEYS = ("alert", "data", "event")
+_WRAPPER_KEYS = ("all_fields", "alert", "data", "event")
 
 _TEXT_SEVERITIES = {
     "LOW": AlertSeverity.LOW,
@@ -49,34 +50,63 @@ def map_shuffle_alert(payload: Mapping[str, Any]) -> SecurityAlert:
 
 
 def _unwrap(payload: Mapping[str, Any]) -> Mapping[str, Any]:
-    for key in _WRAPPER_KEYS:
-        nested = payload.get(key)
-        if isinstance(nested, Mapping):
-            # The nested alert wins; wrapper keys only fill the gaps.
-            return {**payload, **nested}
-    return payload
+    current: Mapping[str, Any] = payload
+    for _ in range(2):
+        unwrapped = False
+        for key in _WRAPPER_KEYS:
+            nested = current.get(key)
+            if isinstance(nested, Mapping):
+                # Wazuh's native shuffle.py compresses severity into 1/2/3 at the outer
+                # level while keeping the real 0-15 rule.level inside all_fields.
+                base = (
+                    {k: v for k, v in current.items() if k != "severity"}
+                    if key == "all_fields" and isinstance(nested.get("rule"), Mapping)
+                    else current
+                )
+                # The nested alert wins; wrapper keys only fill the gaps.
+                current = {**base, **nested}
+                if key == "data":
+                    return current
+                unwrapped = True
+                break
+        if not unwrapped:
+            break
+    return current
 
 
 def _alert_fields(data: Mapping[str, Any]) -> dict[str, Any]:
     rule = _mapping(data.get("rule"))
+    nested_data = _mapping(data.get("data"))
+    nested_alert = _mapping(nested_data.get("alert"))
+    sources = (data, nested_data)
+
+    default_source = "wazuh" if rule or _mapping(data.get("agent")) else "shuffle"
     return {
         "alert_id": _alert_id(data),
         "timestamp": _timestamp(_first(data, ("timestamp", "time", "@timestamp", "date"))),
-        "source": _text(_first(data, ("source", "sensor"))) or "shuffle",
+        "source": _text(_first(data, ("source", "sensor"))) or default_source,
         "event_type": _text(_first(data, ("event_type", "event"))) or "alert",
-        "severity": _severity(data, rule),
-        "src_ip": _first(data, ("src_ip", "srcip", "source_ip", "src_addr")),
-        "src_port": _first(data, ("src_port", "srcport", "source_port")),
-        "dst_ip": _first(data, ("dst_ip", "dstip", "dest_ip", "destination_ip")),
-        "dst_port": _first(data, ("dst_port", "dstport", "dest_port", "destination_port")),
-        "protocol": _text(_first(data, ("protocol", "proto"))),
+        "severity": _severity(data, rule, nested_alert),
+        "src_ip": _first_in(sources, ("src_ip", "srcip", "source_ip", "src_addr")),
+        "src_port": _first_in(sources, ("src_port", "srcport", "source_port")),
+        "dst_ip": _first_in(
+            sources, ("dst_ip", "dstip", "dest_ip", "destination_ip")
+        ),
+        "dst_port": _first_in(
+            sources, ("dst_port", "dstport", "dest_port", "destination_port")
+        ),
+        "protocol": _text(_first_in(sources, ("protocol", "proto"))),
         "signature": _text(
             _first(data, ("signature", "description", "rule_description", "message"))
         )
+        or _text(nested_alert.get("signature"))
         or _text(rule.get("description")),
-        "signature_id": _signature_id(data, rule),
-        "category": _text(_first(data, ("category", "rule_group"))),
-        "flow_id": _first(data, ("flow_id", "flow")),
+        "signature_id": _signature_id(data, rule, nested_alert),
+        "category": _text(_first(data, ("category", "rule_group")))
+        or _text(nested_alert.get("category"))
+        or _text(rule.get("groups")),
+        "flow_id": _first_in(sources, ("flow_id", "flow")),
+        "raw": dict(data),
     }
 
 
@@ -88,6 +118,16 @@ def _first(data: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
     for key in keys:
         if key in data and data[key] not in (None, ""):
             return data[key]
+    return None
+
+
+def _first_in(
+    mappings: tuple[Mapping[str, Any], ...], keys: tuple[str, ...]
+) -> Any:
+    for mapping in mappings:
+        found = _first(mapping, keys)
+        if found is not None:
+            return found
     return None
 
 
@@ -111,8 +151,16 @@ def _alert_id(data: Mapping[str, Any]) -> str:
     return f"shuffle-{digest}"
 
 
-def _signature_id(data: Mapping[str, Any], rule: Mapping[str, Any]) -> int | None:
-    raw = _first(data, ("signature_id", "rule_id", "sid"))
+def _signature_id(
+    data: Mapping[str, Any],
+    rule: Mapping[str, Any],
+    nested_alert: Mapping[str, Any] | None = None,
+) -> int | None:
+    raw = _first(data, ("signature_id", "sid"))
+    if raw is None and nested_alert:
+        raw = _first(nested_alert, ("signature_id", "sid"))
+    if raw is None:
+        raw = _first(data, ("rule_id",))
     if raw is None:
         raw = _first(rule, ("id", "sid", "signature_id"))
     if raw is None:
@@ -123,10 +171,19 @@ def _signature_id(data: Mapping[str, Any], rule: Mapping[str, Any]) -> int | Non
         return None
 
 
-def _severity(data: Mapping[str, Any], rule: Mapping[str, Any]) -> str:
+def _severity(
+    data: Mapping[str, Any],
+    rule: Mapping[str, Any],
+    nested_alert: Mapping[str, Any] | None = None,
+) -> str:
     raw = _first(data, ("severity", "level", "risk", "priority"))
     if raw is None:
         raw = _first(rule, ("level", "severity"))
+    if raw is None and nested_alert and nested_alert.get("severity") is not None:
+        try:
+            return normalize_suricata_severity(int(str(nested_alert["severity"]))).value
+        except ValueError:
+            pass
     if raw is None:
         raise AlertMappingError("alert payload has no severity/level field")
     if isinstance(raw, str):

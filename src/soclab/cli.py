@@ -1,5 +1,6 @@
 import json
 import platform
+import subprocess
 import time
 from pathlib import Path
 from typing import Annotated
@@ -13,18 +14,30 @@ from soclab.clients.wazuh import WazuhClient
 from soclab.config import Settings, get_settings, get_settings_optional
 from soclab.domain.alert import AlertSeverity, SecurityAlert
 from soclab.exceptions import SocLabError
+from soclab.services.dedup import AlertDeduplicator
 from soclab.services.demo import run_demo
 from soclab.services.events import sample_failed_ssh_event
 from soclab.services.health import build_health_report
-from soclab.services.nids import AlertFilters, NidsService, format_size, parse_ip_filter
+from soclab.services.nids import (
+    AlertFilters,
+    NidsService,
+    format_size,
+    parse_ip_filter,
+    resolve_eve_path,
+)
+from soclab.services.provision import LabProvisionService
 from soclab.services.response import ResponseService, build_response_service
-from soclab.services.stage1_verification import Stage1VerificationService
+from soclab.services.stage1_verification import (
+    Stage1VerificationService,
+    find_project_root,
+)
 from soclab.services.stage2_verification import Stage2VerificationService
 from soclab.services.stage3_verification import Stage3VerificationService
+from soclab.services.stage4_verification import Stage4VerificationService
 
 app = typer.Typer(
     name="soclab",
-    help="Open SOC Lab - Stage 1: Wazuh HIDS/SIEM demonstrator.",
+    help="Open SOC Lab - HIDS + NIDS + SIEM + SOAR + Dashboards.",
     no_args_is_help=True,
 )
 event_app = typer.Typer(help="Validate or inject controlled demo events.")
@@ -37,6 +50,12 @@ stage2_app = typer.Typer(help="Run Stage 2 verification checks.")
 app.add_typer(stage2_app, name="stage2")
 stage3_app = typer.Typer(help="Run Stage 3 (SOAR response) verification checks.")
 app.add_typer(stage3_app, name="stage3")
+dedup_app = typer.Typer(help="Inspect or purge the SOAR deduplication database.")
+app.add_typer(dedup_app, name="dedup")
+stage4_app = typer.Typer(help="Run Stage 4 end-to-end verification checks.")
+app.add_typer(stage4_app, name="stage4")
+lab_app = typer.Typer(help="Manage Stage 4 containerized lab provisioning.")
+app.add_typer(lab_app, name="lab")
 demo_app = typer.Typer(help="Run end-to-end stage demos.")
 app.add_typer(demo_app, name="demo")
 console = Console()
@@ -66,6 +85,13 @@ def _stage3_settings() -> Settings:
 
 def _response_service() -> ResponseService:
     return build_response_service(_stage3_settings())
+
+
+def _resolved_eve_path(settings: Settings) -> Path:
+    return resolve_eve_path(
+        Path(settings.suricata_eve_path),
+        project_root=find_project_root(),
+    )
 
 
 def _parse_severity_filter(value: str | None) -> AlertSeverity | None:
@@ -135,6 +161,7 @@ def config() -> None:
         "Response mode", "dry-run" if settings.response_dry_run else "LIVE"
     )
     table.add_row("Audit log", str(settings.audit_log_path))
+    table.add_row("Evidence dir", str(settings.evidence_dir))
     table.add_row("Password", "********")
     table.add_row(
         "Webhook token",
@@ -288,7 +315,7 @@ def nids_status() -> None:
     service = _nids_service()
     status = service.status(
         enabled=settings.suricata_enabled,
-        eve_path=Path(settings.suricata_eve_path),
+        eve_path=_resolved_eve_path(settings),
     )
 
     table = Table(title="Open SOC Lab - NIDS Status")
@@ -378,7 +405,7 @@ def nids_alerts(
         return
 
     service = _nids_service()
-    eve_path = Path(settings.suricata_eve_path)
+    eve_path = _resolved_eve_path(settings)
     if not eve_path.is_file() and platform.system().lower().startswith("win"):
         fixture = service.demo_eve_path(Path(__file__).resolve().parents[2])
         if fixture.is_file():
@@ -479,7 +506,7 @@ def nids_wazuh_status(
 
     service = _nids_service()
     integration = service.check_wazuh_integration(
-        eve_path=Path(settings.suricata_eve_path),
+        eve_path=_resolved_eve_path(settings),
         ossec_conf_path=ossec_conf,
     )
 
@@ -749,9 +776,41 @@ def status() -> None:
     )
     table.add_row("Protected networks", settings.protected_networks)
     table.add_row("Audit log", str(settings.audit_log_path))
+    table.add_row("Evidence dir", str(settings.evidence_dir))
     table.add_row("Dedup database", str(settings.state_db_path))
+    table.add_row(
+        "Dedup TTL",
+        f"{settings.dedup_ttl_seconds}s" if settings.dedup_ttl_seconds > 0 else "never",
+    )
     table.add_row("Processed alerts", str(service.processed_alert_count))
     table.add_row("Ready", "YES" if not problems else "; ".join(problems))
+    console.print(table)
+
+
+@app.command()
+def unblock(
+    ip: Annotated[
+        str,
+        typer.Argument(help="IP address to remove from the firewall block list."),
+    ],
+) -> None:
+    """Remove a firewall block rule for an IP (respects SOCLAB_RESPONSE_DRY_RUN)."""
+    try:
+        service = _response_service()
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    result = service.unblock(ip)
+    table = Table(title="Open SOC Lab - Firewall unblock")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Target IP", ip)
+    table.add_row("Adapter", result.adapter)
+    table.add_row("Dry-run", "YES" if result.dry_run else "NO")
+    table.add_row("Executed", "YES" if result.executed else "NO")
+    table.add_row("Command", result.command)
+    table.add_row("Message", result.message)
     console.print(table)
 
 
@@ -873,3 +932,148 @@ def demo_final() -> None:
             console.print(f"  [red]-[/red] {failure}")
 
     raise typer.Exit(code=0 if report.passed else 1)
+
+
+@lab_app.command("provision")
+def lab_provision() -> None:
+    """Wire Wazuh Manager, Shuffle SOAR workflow, and Wazuh Dashboard objects."""
+    try:
+        settings = _stage3_settings()
+        report = LabProvisionService(settings=settings).provision()
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    table = Table(title="Open SOC Lab - Stage 4 provisioning")
+    table.add_column("Component")
+    table.add_column("Result")
+    table.add_row(
+        "Docker network (soclab-net)",
+        "connected" if report.network_connected else "no",
+    )
+    table.add_row("Shuffle workflow ID", report.shuffle_workflow_id or "-")
+    table.add_row("Shuffle webhook URL", report.shuffle_hook_url or "-")
+    table.add_row("Wazuh custom rules", "updated" if report.rules_updated else "unchanged")
+    table.add_row(
+        "Wazuh -> Shuffle integration",
+        "updated" if report.integration_updated else "unchanged",
+    )
+    table.add_row("Wazuh manager restart", "yes" if report.wazuh_restarted else "no")
+    table.add_row("Dashboard objects imported", str(report.dashboard_imported))
+    console.print(table)
+
+
+@stage4_app.command("verify")
+def stage4_verify(
+    quick: Annotated[
+        bool,
+        typer.Option(
+            "--quick", help="Run quick checks only (skip pytest, ruff, mypy)."
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", help="Show detailed subprocess output."),
+    ] = False,
+    no_color: Annotated[
+        bool,
+        typer.Option("--no-color", help="Disable color output for this run."),
+    ] = False,
+) -> None:
+    """Run full end-to-end Stage 4 verification across SIEM, NIDS, SOAR, and Dashboards."""
+    local_console = Console(no_color=no_color)
+    report = Stage4VerificationService(console=local_console).verify(
+        quick=quick, verbose=verbose
+    )
+    raise typer.Exit(code=1 if report.has_required_failures else 0)
+
+
+@app.command()
+def attack(
+    mode: Annotated[
+        str,
+        typer.Argument(help="Attack mode: recon, web, ssh, all, or check."),
+    ] = "all",
+    target: Annotated[
+        str,
+        typer.Option("--target", help="Target container hostname or IP."),
+    ] = "linux-target",
+) -> None:
+    """Run controlled attack simulation from the Kali container against linux-target."""
+    allowed = {"recon", "web", "ssh", "all", "check"}
+    normalized = mode.strip().lower()
+    if normalized not in allowed:
+        raise typer.BadParameter(f"Mode must be one of: {', '.join(sorted(allowed))}.")
+
+    completed = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--profile",
+            "full",
+            "exec",
+            "-T",
+            "kali-attacker",
+            "/usr/local/bin/simulate_attacks.sh",
+            target,
+            normalized,
+        ],
+        check=False,
+    )
+    raise typer.Exit(code=completed.returncode)
+
+
+@dedup_app.command("status")
+def dedup_status() -> None:
+    """Show the deduplication database count and configured TTL."""
+    try:
+        settings = _stage3_settings()
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    dedup = AlertDeduplicator(
+        settings.state_db_path,
+        ttl_seconds=settings.dedup_ttl_seconds,
+    )
+    table = Table(title="Open SOC Lab - Deduplication status")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Database path", str(dedup.path))
+    table.add_row("Processed alerts", str(dedup.count()))
+    table.add_row(
+        "Configured TTL",
+        f"{settings.dedup_ttl_seconds}s" if settings.dedup_ttl_seconds > 0 else "never",
+    )
+    console.print(table)
+
+
+@dedup_app.command("clear")
+def dedup_clear(
+    older_than: Annotated[
+        float | None,
+        typer.Option(
+            "--older-than",
+            min=0.0,
+            help="Only remove entries older than N seconds; omit to clear all.",
+        ),
+    ] = None,
+) -> None:
+    """Clear all or expired entries from the SOAR deduplication database."""
+    try:
+        settings = _stage3_settings()
+    except SocLabError as exc:
+        _fail(exc)
+        return
+
+    dedup = AlertDeduplicator(
+        settings.state_db_path,
+        ttl_seconds=settings.dedup_ttl_seconds,
+    )
+    removed = (
+        dedup.clear() if older_than is None else dedup.purge_older_than(older_than)
+    )
+    console.print(
+        f"Removed [bold]{removed}[/bold] deduplication record(s) from {dedup.path} "
+        f"(remaining: {dedup.count()})."
+    )

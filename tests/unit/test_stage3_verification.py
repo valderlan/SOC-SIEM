@@ -15,6 +15,7 @@ def _settings(tmp_path: Path) -> Settings:
     return Settings(
         webhook_token=SecretStr("verify-token"),
         audit_log_path=tmp_path / "logs" / "audit.jsonl",
+        evidence_dir=tmp_path / "logs" / "evidence",
         state_db_path=tmp_path / "runtime" / "state.db",
     )
 

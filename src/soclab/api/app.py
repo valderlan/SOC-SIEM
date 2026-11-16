@@ -42,6 +42,20 @@ class AlertDecisionResponse(BaseModel):
     protected: bool
     adapter: str
     reason: str
+    evidence_path: str | None = None
+
+
+class UnblockRequest(BaseModel):
+    ip: str
+
+
+class UnblockResponse(BaseModel):
+    ip: str
+    executed: bool
+    dry_run: bool
+    adapter: str
+    command: str
+    message: str
 
 
 def _check_token(settings: Settings, provided: str | None) -> None:
@@ -135,6 +149,23 @@ def create_app(
             protected=outcome.protected,
             adapter=outcome.adapter,
             reason=outcome.reason,
+            evidence_path=outcome.evidence_path,
+        )
+
+    @app.post(
+        "/api/v1/unblock",
+        response_model=UnblockResponse,
+        dependencies=[Depends(require_token)],
+    )
+    def unblock_ip(request: UnblockRequest) -> UnblockResponse:
+        result = service.unblock(request.ip)
+        return UnblockResponse(
+            ip=request.ip,
+            executed=result.executed,
+            dry_run=result.dry_run,
+            adapter=result.adapter,
+            command=result.command,
+            message=result.message,
         )
 
     return app

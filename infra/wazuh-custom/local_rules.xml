@@ -1,0 +1,78 @@
+<!-- Custom SOC Lab rules for Suricata elevation, attack correlation, FIM, and SOAR audit indexing -->
+<group name="soclab,">
+
+  <!-- Elevate Suricata EVE JSON alerts based on alert.severity (1=CRITICAL, 2=HIGH, 3=MEDIUM) -->
+  <rule id="100101" level="13">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^1$</field>
+    <description>SOC Lab Suricata CRITICAL: $(alert.signature)</description>
+    <group>suricata,ids,critical,</group>
+  </rule>
+
+  <rule id="100102" level="10">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^2$</field>
+    <description>SOC Lab Suricata HIGH: $(alert.signature)</description>
+    <group>suricata,ids,high,</group>
+  </rule>
+
+  <rule id="100103" level="6">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^3$</field>
+    <description>SOC Lab Suricata MEDIUM: $(alert.signature)</description>
+    <group>suricata,ids,medium,</group>
+  </rule>
+
+  <!-- SSH brute-force correlation (5 failures in 60s -> CRITICAL level 12) -->
+  <rule id="100110" level="12" frequency="5" timeframe="60">
+    <if_matched_sid>5760</if_matched_sid>
+    <same_source_ip />
+    <description>SOC Lab: SSH brute force detected from $(srcip)</description>
+    <group>sshd,authentication_failures,critical,</group>
+  </rule>
+
+  <rule id="100111" level="12" frequency="5" timeframe="60">
+    <if_matched_sid>5710</if_matched_sid>
+    <same_source_ip />
+    <description>SOC Lab: SSH invalid user brute force detected from $(srcip)</description>
+    <group>sshd,authentication_failures,critical,</group>
+  </rule>
+
+  <!-- Web attack rules -->
+  <rule id="100120" level="10">
+    <if_sid>31103</if_sid>
+    <description>SOC Lab: Web SQL injection attempt detected from $(srcip)</description>
+    <group>web,attack,high,</group>
+  </rule>
+
+  <rule id="100121" level="13">
+    <if_sid>31104</if_sid>
+    <description>SOC Lab: Critical web path traversal / exploit attempt from $(srcip)</description>
+    <group>web,attack,critical,</group>
+  </rule>
+
+  <!-- File Integrity Monitoring on protected directory -->
+  <rule id="100130" level="10">
+    <if_sid>550,553,554</if_sid>
+    <match>/etc/soclab-protected</match>
+    <description>SOC Lab: Protected file modified in /etc/soclab-protected</description>
+    <group>syscheck,fim,high,</group>
+  </rule>
+
+  <!-- Ingest SOAR decision audit.jsonl at level 4/5 (indexed in Dashboard, below Shuffle threshold 6 to prevent loops) -->
+  <rule id="100150" level="4">
+    <decoded_as>json</decoded_as>
+    <field name="adapter">\.+</field>
+    <field name="requested_action">\.+</field>
+    <description>SOC Lab SOAR Decision: $(requested_action) (severity=$(severity), target=$(target_ip))</description>
+    <group>soclab_soar,audit,</group>
+  </rule>
+
+  <rule id="100151" level="5">
+    <if_sid>100150</if_sid>
+    <action>BLOCK_IP</action>
+    <description>SOC Lab SOAR Firewall Block: $(target_ip) via $(adapter) (executed=$(executed))</description>
+    <group>soclab_soar,firewall_block,</group>
+  </rule>
+
+</group>

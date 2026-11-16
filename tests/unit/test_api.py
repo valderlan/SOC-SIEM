@@ -16,6 +16,7 @@ def _settings(tmp_path: Path, *, token: str = "test-token") -> Settings:
     return Settings(
         webhook_token=SecretStr(token),
         audit_log_path=tmp_path / "logs" / "audit.jsonl",
+        evidence_dir=tmp_path / "logs" / "evidence",
         state_db_path=tmp_path / "runtime" / "state.db",
     )
 
@@ -139,3 +140,19 @@ def test_unmappable_payload_returns_400(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert "severity" in response.text
+
+
+def test_unblock_requires_token_and_returns_result(client: TestClient) -> None:
+    rejected = client.post("/api/v1/unblock", json={"ip": "203.0.113.99"})
+    assert rejected.status_code == 401
+
+    accepted = client.post(
+        "/api/v1/unblock",
+        json={"ip": "203.0.113.99"},
+        headers={TOKEN_HEADER: "test-token"},
+    )
+    assert accepted.status_code == 200
+    body = accepted.json()
+    assert body["ip"] == "203.0.113.99"
+    assert body["dry_run"] is True
+    assert body["executed"] is False

@@ -1,3 +1,5 @@
+.env
+.coverage
 .venv/
 *.lock
 __pycache__/
@@ -5,3 +7,4 @@ __pycache__/
 logs/
 runtime/
 .pytest_tmp/
+infra/wazuh-docker/

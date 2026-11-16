@@ -278,6 +278,22 @@ def parse_ip_filter(value: str | None) -> IPAddress | None:
     return None if value is None else ip_address(value)
 
 
+def resolve_eve_path(
+    configured_path: Path,
+    *,
+    project_root: Path | None = None,
+    default_path: Path = Path("/var/log/suricata/eve.json"),
+) -> Path:
+    """Resolve the effective EVE JSON path, falling back to container live mount on hosts."""
+    if configured_path.is_file():
+        return configured_path
+    if project_root is not None and configured_path == default_path:
+        container_live = project_root / "runtime" / "suricata" / "eve.json"
+        if container_live.is_file():
+            return container_live
+    return configured_path
+
+
 def format_size(num_bytes: int | None) -> str:
     if num_bytes is None:
         return "-"

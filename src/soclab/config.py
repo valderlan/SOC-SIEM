@@ -46,7 +46,10 @@ class Settings(BaseSettings):
     response_dry_run: bool = True
     protected_networks: str = DEFAULT_PROTECTED_NETWORKS
     audit_log_path: Path = Field(default=Path("logs/audit.jsonl"))
+    evidence_dir: Path = Field(default=Path("logs/evidence"))
     state_db_path: Path = Field(default=Path("runtime/soclab_state.db"))
+    dedup_ttl_seconds: int = Field(default=0, ge=0)
+    chat_webhook_url: str = Field(default="")
 
     @model_validator(mode="after")
     def validate_tls(self) -> Self:

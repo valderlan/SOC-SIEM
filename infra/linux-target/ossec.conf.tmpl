@@ -1,0 +1,53 @@
+<ossec_config>
+  <client>
+    <server>
+      <address>__WAZUH_MANAGER__</address>
+      <port>1514</port>
+      <protocol>tcp</protocol>
+    </server>
+    <config-profile>ubuntu, ubuntu24, ubuntu24.04</config-profile>
+    <notify_time>10</notify_time>
+    <time-reconnect>60</time-reconnect>
+    <auto_restart>yes</auto_restart>
+    <crypto_method>aes</crypto_method>
+  </client>
+
+  <client_buffer>
+    <disabled>no</disabled>
+    <queue_size>5000</queue_size>
+    <events_per_second>500</events_per_second>
+  </client_buffer>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>600</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <alert_new_files>yes</alert_new_files>
+    <directories realtime="yes" check_all="yes">/etc/soclab-protected</directories>
+  </syscheck>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>apache</log_format>
+    <location>/var/log/nginx/access.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>apache</log_format>
+    <location>/var/log/nginx/error.log</location>
+  </localfile>
+
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/suricata/eve.json</location>
+  </localfile>
+
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/soclab/audit.jsonl</location>
+  </localfile>
+</ossec_config>
