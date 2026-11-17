@@ -18,7 +18,7 @@ O arquivo [soclab-dashboard.ndjson](file:///C:/Users/esdn6/Documents/SOC-SIEM/in
 |---|---|---|
 | `SOC Lab - Total de Alertas` | Métrica | Volume total de eventos indexados no SIEM no intervalo selecionado. |
 | `SOC Lab - Alertas por Severidade (Rule Level)` | Gráfico de Pizza/Donut | Distribuição por faixas de nível: `0–3` (Low), `4–7` (Medium), `8–11` (High), `12+` (Critical). |
-| `SOC Lab - Eventos por Host / Agente (Linux vs Windows)` | Barras Horizontais | Comparativo de alertas por endpoint (`linux-target`, `wazuh.manager`, endpoint Windows quando conectado) agrupado por `agent.os.name`. |
+| `SOC Lab - Eventos por Host / Agente e Origem` | Barras Horizontais | Comparativo de alertas por endpoint (`linux-target`, `wazuh.manager`, endpoint Windows quando conectado) agrupado por `decoder.name` (`json`, `web-accesslog`, `sshd`, `syscheck`). |
 | `SOC Lab - Tendencia Temporal de Alertas` | Série Histórica (Linha) | Evolução temporal de ataques e alertas agrupada por nível de severidade. |
 | `SOC Lab - Anomalias de Rede (Suricata NIDS)` | Tabela | Assinaturas Suricata (`data.alert.signature`), IP de origem e destino filtrados por `rule.groups: "suricata"`. |
 | `SOC Lab - Respostas Automatizadas do SOAR` | Tabela | Decisões do Shuffle + API `soclab` (`data.action`, `data.target_ip`, `data.executed`) reingeridas via `logs/audit.jsonl` (regras `100150` / `100151`). |
@@ -60,10 +60,10 @@ Na barra de busca do Wazuh Dashboard, certifique-se de que a linguagem está em 
    ```text
    rule.groups: "soclab_soar"
    ```
-8. **Separar eventos de endpoints Windows vs. Linux:**
+8. **Separar eventos por endpoint (`agent.name`) ou plataforma (quando houver Windows e Linux ativos):**
    ```text
-   agent.os.platform: "ubuntu"
+   agent.name: "linux-target"
    ```
    ```text
-   agent.os.platform: "windows"
+   data.os.platform: "windows" OR agent.name: *win*
    ```
