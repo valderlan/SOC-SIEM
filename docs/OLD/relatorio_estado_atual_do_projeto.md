@@ -1,4 +1,4 @@
-> **Nota Histórica:** Este documento registra o diagnóstico inicial realizado **antes** da implementação da Etapa 4. Todos os gaps obrigatórios listados aqui já foram implementados e validados; consulte [relatorio4.md](file:///C:/Users/esdn6/Documents/SOC-SIEM/docs/relatorio4.md) e [relatorio_analise_completa_do_projeto.md](file:///C:/Users/esdn6/Documents/SOC-SIEM/docs/relatorio_analise_completa_do_projeto.md) para o estado atual do projeto.
+﻿> **Nota Histórica:** Este documento registra o diagnóstico inicial realizado **antes** da implementação da Etapa 4. Todos os gaps obrigatórios listados aqui já foram implementados e validados; consulte [relatorio4.md](relatorio4.md) e [relatorio_analise_completa_do_projeto.md](relatorio_analise_completa_do_projeto.md) para o estado atual do projeto.
 
 # Relatório Detalhado: Estado Atual do Projeto e Pendências para Finalização (Open SOC Lab)
 
@@ -76,7 +76,7 @@ A aplicação `soclab` foi desenhada de forma modular e limpa, dividida em subpa
 
 ### 3.2. Estado Atual do Ambiente Local (Arquivos de Runtime e Configuração)
 
-Durante a inspeção do diretório de trabalho (`C:\Users\esdn6\Documents\SOC-SIEM`), foram constatados os seguintes detalhes sobre o estado local:
+Durante a inspeção do diretório de trabalho (`SOC-SIEM`), foram constatados os seguintes detalhes sobre o estado local:
 
 1. **Arquivo `.env` incompleto:**
    * O arquivo `.env` local contém apenas as 6 variáveis da Etapa 1 e **`SOCLAB_WAZUH_PASSWORD=` está vazio**.

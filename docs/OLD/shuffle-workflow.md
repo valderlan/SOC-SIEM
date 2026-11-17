@@ -1,4 +1,4 @@
-# Shuffle -> SOC Lab (Stage 3)
+﻿# Shuffle -> SOC Lab (Stage 3)
 
 Fluxo completo:
 

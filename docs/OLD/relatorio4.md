@@ -1,4 +1,4 @@
-# Relatório Completo da Sessão e da Etapa 4 — Open SOC Lab (`SOC-SIEM`)
+﻿# Relatório Completo da Sessão e da Etapa 4 — Open SOC Lab (`SOC-SIEM`)
 
 **Projeto:** `SOC-SIEM` (`open-soc-lab`)  
 **Branch de trabalho:** `etapa4` (baseada no commit `08728a8` — *Add Stage 3 SOAR response pipeline*)  

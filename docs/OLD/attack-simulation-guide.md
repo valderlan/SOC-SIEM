@@ -1,4 +1,4 @@
-# Guia de Simulação de Ataques e Validação Ponta a Ponta
+﻿# Guia de Simulação de Ataques e Validação Ponta a Ponta
 
 Este roteiro valida os **6 fluxos ponta a ponta** da especificação usando o container atacante **Kali Linux** (`kali-attacker`, IP `172.28.0.200`) contra o endpoint monitorado **Ubuntu + Serviços + Suricata + Wazuh Agent** (`linux-target`, IP `172.28.0.20`).
 
@@ -33,7 +33,7 @@ Executa ICMP ping, port scan TCP (`nmap`) e sonda HTTP com User-Agent do Nmap em
 ```
 * **Suricata NIDS:** dispara SIDs `910001` (`LOW`), `910002` (`MEDIUM`) e `910003` (`MEDIUM`).
 * **Wazuh SIEM:** regra customizada `100103` eleva alertas Suricata de severidade 3 para nível `6`.
-* **Shuffle $\rightarrow$ SOC Lab SOAR:** API responde `action=LOG` e grava em [audit.jsonl](file:///C:/Users/esdn6/Documents/SOC-SIEM/logs/audit.jsonl) sem bloquear o IP nem enviar spam de email.
+* **Shuffle $\rightarrow$ SOC Lab SOAR:** API responde `action=LOG` e grava em [audit.jsonl](../../logs/audit.jsonl) sem bloquear o IP nem enviar spam de email.
 
 ### Cenário B — Ataque Web SQL Injection (Severidade HIGH $\rightarrow$ Ação `NOTIFY`)
 Envia requisição HTTP simulando tentativa de `UNION SELECT`:

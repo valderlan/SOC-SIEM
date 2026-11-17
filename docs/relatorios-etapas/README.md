@@ -1,0 +1,10 @@
+# Relatórios por Etapa — Open SOC Lab (`SOC-SIEM`)
+
+Esta pasta reúne os relatórios técnicos detalhados de cada uma das **4 etapas evolutivas** do projeto **Open SOC Lab**, mapeando objetivos, arquivos criados/modificados, decisões de engenharia, fluxos implementados e comandos de validação:
+
+| Etapa | Documento | Escopo Principal | Tecnologias Centrais |
+| :---: | :--- | :--- | :--- |
+| **Etapa 1** | [etapa1.md](etapa1.md) | **HIDS + SIEM:** Bootstrap do Wazuh em Docker, cliente REST Python (`WazuhClient`), inventário de agentes (Linux/Windows), avaliação `logtest`, injeção de eventos e verificador `soclab stage1 verify`. | Wazuh `v4.14.8` (`Manager`, `Indexer`, `Dashboard`), Python `httpx`, `typer`, `pydantic-settings`, `rich` |
+| **Etapa 2** | [etapa2.md](etapa2.md) | **NIDS:** Monitoramento de rede com Suricata, leitura em streaming e validação tolerante de `eve.json`, normalização canônica (`SecurityAlert`), integração com Wazuh Agent e verificador `soclab stage2 verify`. | Suricata (`EVE JSON`), Wazuh Agent (`localfile json`), `SuricataEveCollector`, `NidsService` |
+| **Etapa 3** | [etapa3.md](etapa3.md) | **SOAR + Resposta Ativa:** API Webhook em FastAPI (`POST /api/v1/alerts`), motor determinístico de política (`LOG`/`NOTIFY`/`BLOCK_IP`), guarda *fail-closed* de redes protegidas, deduplicação SQLite, auditoria JSONL e adapters de firewall (`dry-run`, `nftables`, `New-NetFirewallRule`). | Shuffle SOAR, FastAPI, Uvicorn, SQLite, `nftables` / Windows Firewall |
+| **Etapa 4** | [etapa4.md](etapa4.md) | **Integração Ponta a Ponta, Dashboards e 1-Clique:** Alvo Linux containerizado (`Nginx` + `OpenSSH` + `Suricata` + `Wazuh Agent` + `nftables` isolado), atacante Kali Linux, regras customizadas Wazuh (`100101–100151`), integração automática `Wazuh -> Shuffle`, notificações **Mailpit**, coleta forense (`logs/evidence/`), rollback (`unblock`), Dashboard `Open SOC Lab - SOC Overview` e scripts 1-clique (`up.ps1` / `up.sh` / `down.ps1`). | Docker Compose (`soclab-net`), Kali Linux, Mailpit SMTP/Webmail, OpenSearch Dashboards (`NDJSON`) |

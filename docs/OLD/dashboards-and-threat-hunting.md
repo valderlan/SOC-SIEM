@@ -1,4 +1,4 @@
-# Dashboards e Guia de Threat Hunting (Open SOC Lab)
+﻿# Dashboards e Guia de Threat Hunting (Open SOC Lab)
 
 Este documento descreve a camada de visualização operacional (Seção 3.4 da especificação) construída sobre o **Wazuh Dashboard** (`https://localhost`) e o guia prático de **Threat Hunting** no índice `wazuh-alerts-*`.
 
@@ -6,7 +6,7 @@ Este documento descreve a camada de visualização operacional (Seção 3.4 da e
 
 ## 1. Dashboard Customizado: `Open SOC Lab - SOC Overview`
 
-O arquivo [soclab-dashboard.ndjson](file:///C:/Users/esdn6/Documents/SOC-SIEM/infra/wazuh-dashboard/soclab-dashboard.ndjson) é importado automaticamente pelo provisionamento (`soclab lab provision` / `.\scripts\up.ps1`) via API de *Saved Objects* do OpenSearch Dashboards.
+O arquivo [soclab-dashboard.ndjson](../../infra/wazuh-dashboard/soclab-dashboard.ndjson) é importado automaticamente pelo provisionamento (`soclab lab provision` / `.\scripts\up.ps1`) via API de *Saved Objects* do OpenSearch Dashboards.
 
 ### Como abrir no navegador:
 1. Acesse **`https://localhost`** (`admin` / `SecretPassword`).

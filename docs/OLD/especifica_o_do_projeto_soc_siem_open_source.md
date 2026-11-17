@@ -1,4 +1,4 @@
-# Especificação do Projeto: Ambiente SOC/SIEM Open-Source (Open SOC Lab)
+﻿# Especificação do Projeto: Ambiente SOC/SIEM Open-Source (Open SOC Lab)
 
 ## 1. Objetivo Geral do Trabalho
 
